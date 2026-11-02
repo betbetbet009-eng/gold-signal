@@ -1,10 +1,8 @@
 name: gold-signal
 on:
   schedule:
-    # pre-alert before 4H bar close (covers NY summer/winter time)
-    - cron: "35,50 0,1,4,5,8,9,12,13,16,17,20,21 * * *"
-    # confirm after bar close
-    - cron: "5 1,2,5,6,9,10,13,14,17,18,21,22 * * *"
+    # ทุก 10 นาที (อาทิตย์-ศุกร์ ช่วงตลาดทองเปิด): เตือนก่อนแท่ง 30 นาทีปิด และยืนยันหลังปิด
+    - cron: "*/10 * * * 0-5"
   workflow_dispatch:
 
 concurrency:
