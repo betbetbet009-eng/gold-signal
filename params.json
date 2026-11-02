@@ -1,0 +1,11 @@
+{
+  "n": 20,
+  "sl": 3.0,
+  "rr": 3.0,
+  "adx": 20,
+  "allow_short": false,
+  "balance": 5000,
+  "risk_pct": 2.0,
+  "account": "Standard",
+  "updated": "2026-11-02"
+}
