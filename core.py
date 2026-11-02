@@ -1,10 +1,10 @@
-# ส่วนกลาง: ดึงข้อมูลทอง, สร้างแท่ง 4H ให้ตรงกับ OANDA บน TradingView, คำนวณอินดิเคเตอร์, backtest, ส่งแจ้งเตือน
+# ส่วนกลาง: ดึงข้อมูลทอง, สร้างแท่งให้ตรงกับ OANDA บน TradingView, คำนวณอินดิเคเตอร์, backtest, ส่งแจ้งเตือน
 import base64, json, os, urllib.request
 import numpy as np, pandas as pd
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PARAMS_FILE = os.path.join(ROOT, "params.json")
-FEE = 0.0006
+COST = 0.30  # สเปรด+slippage ไป-กลับ (ดอลลาร์ต่อออนซ์)
 
 
 def get(url, data=None, headers=None):
@@ -20,26 +20,26 @@ def save_params(p):
     json.dump(p, open(PARAMS_FILE, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 
 
-def to_4h(df):
-    # แท่ง 4H ของ OANDA บน TradingView เริ่ม 17:00 เวลานิวยอร์ก (17, 21, 01, 05, 09, 13)
-    # จัดกลุ่มตามเวลานาฬิกานิวยอร์ก (รองรับการเปลี่ยน Daylight Saving)
-    s = df.set_index("t")
-    s.index = s.index.tz_localize("UTC").tz_convert("America/New_York").tz_localize(None)
-    s = s.resample("4h", offset="1h").agg(dict(o="first", h="max", l="min", c="last")).dropna()
-    s.index = s.index.tz_localize("America/New_York", ambiguous=True, nonexistent="shift_forward").tz_convert("UTC").tz_localize(None)
+def resample(df, minutes):
+    # แท่ง 30 นาทีของ OANDA บน TradingView เริ่มที่นาที :00 และ :30 (เวลา UTC)
+    s = df.set_index("t").resample(f"{minutes}min").agg(dict(o="first", h="max", l="min", c="last")).dropna()
     return s.reset_index()
 
 
-def gold_1h(days=60):
-    r = json.loads(get(f"https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1h&range={days}d"))["chart"]["result"][0]
+def gold_live(minutes, days=30):
+    # ทองฟิวเจอร์ส GC=F จาก Yahoo (แท่ง 15 นาทีรวมแท่งที่กำลังวิ่ง) -> แท่งตาม timeframe ระบบ
+    r = json.loads(get(f"https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=15m&range={days}d"))["chart"]["result"][0]
     q = r["indicators"]["quote"][0]
-    return pd.DataFrame(dict(t=pd.to_datetime(r["timestamp"], unit="s"), o=q["open"], h=q["high"], l=q["low"], c=q["close"])).dropna()
+    df = pd.DataFrame(dict(t=pd.to_datetime(r["timestamp"], unit="s"), o=q["open"], h=q["high"], l=q["low"], c=q["close"])).dropna()
+    df["t"] = df.t.dt.floor("15min")
+    return resample(df, minutes)
 
 
-def paxg_4h(start="2020-09-01"):
+def paxg_hist(minutes, start="2022-01-01"):
+    # ทอง PAXG จาก Binance ย้อนหลังหลายปี (ใช้ทดสอบระบบ) ตัดช่วงตลาดทองปิดวันเสาร์-อาทิตย์
     out, t = [], int(pd.Timestamp(start).timestamp() * 1000)
     while True:
-        d = json.loads(get(f"https://data-api.binance.vision/api/v3/klines?symbol=PAXGUSDT&interval=1h&startTime={t}&limit=1000"))
+        d = json.loads(get(f"https://data-api.binance.vision/api/v3/klines?symbol=PAXGUSDT&interval={minutes}m&startTime={t}&limit=1000"))
         if not d:
             break
         out += d
@@ -49,7 +49,8 @@ def paxg_4h(start="2020-09-01"):
     df = pd.DataFrame(out).iloc[:, :5].astype(float)
     df.columns = ["t", "o", "h", "l", "c"]
     df["t"] = pd.to_datetime(df["t"], unit="ms")
-    return to_4h(df)
+    wd, hr = df.t.dt.weekday, df.t.dt.hour
+    return df[~((wd == 5) | ((wd == 6) & (hr < 23)) | ((wd == 4) & (hr >= 21)))].reset_index(drop=True)
 
 
 def ema(x, n): return pd.Series(x).ewm(span=n, adjust=False).mean().values
@@ -99,7 +100,7 @@ def backtest(df, p, start=None, end=None):
                 j += 1
             if R is None:
                 R = d * (c[i1 - 1] - ent) / sd; j = i1 - 1
-            Rs.append(R - 2 * FEE * ent / sd); i = j + 1; continue
+            Rs.append(R - COST / sd); i = j + 1; continue
         i += 1
     Rs = np.array(Rs)
     return dict(n=len(Rs), wr=float((Rs > 0).mean()) if len(Rs) else 0.0, exp=float(Rs.mean()) if len(Rs) else 0.0)

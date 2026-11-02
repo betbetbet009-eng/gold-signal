@@ -1,11 +1,11 @@
-# เช็กสัญญาณทอง 4H: เตือนล่วงหน้าก่อนแท่งปิด (~5-25 นาที) และยืนยันหลังแท่งปิด
+# เช็กสัญญาณทอง: เตือนล่วงหน้าก่อนแท่งปิด และยืนยันหลังแท่งปิด (รันทุก 10 นาที)
 import json, os, sys
 import pandas as pd
-from core import ROOT, gold_1h, to_4h, signals, load_params, lot_for, notify
+from core import ROOT, gold_live, signals, load_params, lot_for, notify
 
 STATE = os.path.join(ROOT, "state.json")
-PRE_WINDOW_MIN = 25      # เตือนล่วงหน้าเมื่อเหลือเวลาก่อนแท่งปิดไม่เกินกี่นาที
-CONFIRM_WINDOW_MIN = 90  # ยืนยันได้ภายในกี่นาทีหลังแท่งปิด
+PRE_WINDOW_MIN = 12      # เตือนล่วงหน้าเมื่อเหลือเวลาก่อนแท่งปิดไม่เกินกี่นาที
+CONFIRM_WINDOW_MIN = 25  # ยืนยันได้ภายในกี่นาทีหลังแท่งปิด
 
 
 def load_state():
@@ -19,9 +19,10 @@ def describe(kind, side, entry, sl_dist, rr, p, minutes=None):
     tp_dist = sl_dist * rr
     lot, loss001 = lot_for(p, sl_dist)
     sgn = 1 if side == "BUY" else -1
-    lot_txt = f"{lot:.2f} lot" if lot >= 0.01 else f"ทุนไม่พอ (0.01 lot เสีย ~${loss001:.0f})"
-    head = (f"⏳ อีก ~{minutes} นาที อาจมีสัญญาณ {side} ทอง 4H" if kind == "pre"
-            else f"{'🟢' if side == 'BUY' else '🔴'} {side} ทอง XAUUSD 4H ตอนนี้")
+    lot_txt = (f"{lot:.2f} lot (ถ้าโดน SL เสีย ~${lot * 100 * loss001:.2f})" if lot >= 0.01
+               else f"0.01 lot เสีย ~${loss001:.2f} ถ้าโดน SL (เกินที่ตั้งไว้ {p['risk_pct']:.0f}%)")
+    head = (f"⏳ อีก ~{minutes} นาที อาจมีสัญญาณ {side} ทอง" if kind == "pre"
+            else f"{'🟢' if side == 'BUY' else '🔴'} {side} ทอง XAUUSD ตอนนี้")
     body = (f"เข้า ~{entry:.2f}\n"
             f"SL ~{entry - sgn * sl_dist:.2f} (ห่าง {sl_dist:.1f})\n"
             f"TP ~{entry + sgn * tp_dist:.2f} (ห่าง {tp_dist:.1f})\n"
@@ -37,8 +38,9 @@ def main():
     state = load_state()
     sent = set(state["sent"])
     now = pd.Timestamp.now("UTC").tz_localize(None)
-    df = to_4h(gold_1h(60))
-    df["end"] = df.t + pd.Timedelta(hours=4)
+    bar = pd.Timedelta(minutes=p["tf"])
+    df = gold_live(p["tf"])
+    df["end"] = df.t + bar
 
     # 1) เตือนล่วงหน้า: แท่งที่กำลังวิ่ง ถ้าปิดตอนนี้จะเป็นสัญญาณไหม
     last = df.iloc[-1]
