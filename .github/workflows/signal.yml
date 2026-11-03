@@ -1,20 +1,22 @@
 name: gold-signal
 on:
   schedule:
-    # ทุก 10 นาที (อาทิตย์-ศุกร์ ช่วงตลาดทองเปิด): เตือนก่อนแท่ง 30 นาทีปิด และยืนยันหลังปิด
-    - cron: "*/10 * * * 0-5"
+    # สำรอง: ถ้ารอบวนหลุด ให้เริ่มใหม่ (รอบหลักวนต่อเนื่องเองจาก runner.py)
+    - cron: "17 */3 * * *"
   workflow_dispatch:
 
 concurrency:
-  group: gold
+  group: gold-loop
   cancel-in-progress: false
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,12 +24,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - run: python check_signal.py
+      - run: python runner.py
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-      - name: Save sent-alert state
-        run: |
-          git config user.name "gold-bot"
-          git config user.email "gold-bot@users.noreply.github.com"
-          git add state.json
-          git diff --cached --quiet || (git commit -m "update alert state" && git pull --rebase && git push)
+          GH_TOKEN: ${{ github.token }}
