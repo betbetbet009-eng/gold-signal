@@ -53,6 +53,23 @@ def paxg_hist(minutes, start="2022-01-01"):
     return df[~((wd == 5) | ((wd == 6) & (hr < 23)) | ((wd == 4) & (hr >= 21)))].reset_index(drop=True)
 
 
+def market_closed(t):
+    # ตลาดทองปิด: ศุกร์ 21:00 UTC ถึง อาทิตย์ 23:00 UTC
+    wd, hr = t.weekday(), t.hour
+    return wd == 5 or (wd == 6 and hr < 23) or (wd == 4 and hr >= 21)
+
+
+def paxg_recent(minutes, limit=1000, start=None):
+    # ราคาทองแบบเรียลไทม์ (PAXG บน Binance ใกล้เคียงราคาทอง spot) รวมแท่งที่กำลังวิ่ง
+    url = f"https://data-api.binance.vision/api/v3/klines?symbol=PAXGUSDT&interval={minutes}m&limit={limit}"
+    if start is not None:
+        url += f"&startTime={int(pd.Timestamp(start).timestamp() * 1000)}"
+    df = pd.DataFrame(json.loads(get(url))).iloc[:, :5].astype(float)
+    df.columns = ["t", "o", "h", "l", "c"]
+    df["t"] = pd.to_datetime(df["t"], unit="ms")
+    return df[~df.t.apply(market_closed)].reset_index(drop=True)
+
+
 def ema(x, n): return pd.Series(x).ewm(span=n, adjust=False).mean().values
 def rma(x, n): return pd.Series(x).ewm(alpha=1 / n, adjust=False).mean().values
 

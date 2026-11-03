@@ -5,7 +5,7 @@
   "rr": 3.0,
   "adx": 20,
   "allow_short": true,
-  "balance": 30,
+  "balance": 20,
   "risk_pct": 2.0,
   "account": "Cent",
   "updated": "2026-11-02"

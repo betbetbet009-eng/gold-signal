@@ -1,10 +1,11 @@
-# เช็กสัญญาณทอง: เตือนล่วงหน้าก่อนแท่งปิด และยืนยันหลังแท่งปิด (รันทุก 10 นาที)
+# เช็กสัญญาณทอง: เตือนล่วงหน้าก่อนแท่งปิด, ยืนยันหลังแท่งปิด และให้พอร์ตเดโมเทรดตาม (เรียกจาก runner.py ทุก 2 นาที)
 import json, os, sys
 import pandas as pd
-from core import ROOT, gold_live, signals, load_params, lot_for, notify
+from core import ROOT, paxg_recent, market_closed, signals, load_params, lot_for, notify
+import paper
 
 STATE = os.path.join(ROOT, "state.json")
-PRE_WINDOW_MIN = 12      # เตือนล่วงหน้าเมื่อเหลือเวลาก่อนแท่งปิดไม่เกินกี่นาที
+PRE_WINDOW_MIN = 6       # เตือนล่วงหน้าเมื่อเหลือเวลาก่อนแท่งปิดไม่เกินกี่นาที
 CONFIRM_WINDOW_MIN = 25  # ยืนยันได้ภายในกี่นาทีหลังแท่งปิด
 
 
@@ -38,8 +39,15 @@ def main():
     state = load_state()
     sent = set(state["sent"])
     now = pd.Timestamp.now("UTC").tz_localize(None)
+    pst = paper.load()
+    paper.update(pst)
+    paper.daily_summary(pst, now)
+    paper.save(pst)
+    if market_closed(now):
+        print(f"now {now} | market closed")
+        return
     bar = pd.Timedelta(minutes=p["tf"])
-    df = gold_live(p["tf"])
+    df = paxg_recent(p["tf"])
     df["end"] = df.t + bar
 
     # 1) เตือนล่วงหน้า: แท่งที่กำลังวิ่ง ถ้าปิดตอนนี้จะเป็นสัญญาณไหม
@@ -63,6 +71,8 @@ def main():
         if side and f"confirm:{bar.t}" not in sent:
             notify(*describe("confirm", side, bar.c, p["sl"] * a[-1], p["rr"], p))
             sent.add(f"confirm:{bar.t}")
+            paper.open_trade(pst, side, bar.c, p["sl"] * a[-1], p["rr"], bar.end)
+            paper.save(pst)
         elif not side and f"pre:{bar.t}" in sent and f"cancel:{bar.t}" not in sent:
             notify("❌ ยกเลิกสัญญาณทอง", "แท่งปิดแล้วไม่เข้าเงื่อนไข ไม่ต้องเข้าออเดอร์", tags="x", priority="default")
             sent.add(f"cancel:{bar.t}")
