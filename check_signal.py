@@ -3,6 +3,7 @@ import json, os, sys
 import pandas as pd
 from core import ROOT, paxg_recent, market_closed, signals, load_params, lot_for, notify
 import paper
+import broker
 
 STATE = os.path.join(ROOT, "state.json")
 PRE_WINDOW_MIN = 6       # เตือนล่วงหน้าเมื่อเหลือเวลาก่อนแท่งปิดไม่เกินกี่นาที
@@ -73,6 +74,7 @@ def main():
             sent.add(f"confirm:{bar.t}")
             paper.open_trade(pst, side, bar.c, p["sl"] * a[-1], p["rr"], bar.end)
             paper.save(pst)
+            broker.place(side, p["sl"] * a[-1], p["rr"], p)
         elif not side and f"pre:{bar.t}" in sent and f"cancel:{bar.t}" not in sent:
             notify("❌ ยกเลิกสัญญาณทอง", "แท่งปิดแล้วไม่เข้าเงื่อนไข ไม่ต้องเข้าออเดอร์", tags="x", priority="default")
             sent.add(f"cancel:{bar.t}")
