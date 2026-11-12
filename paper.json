@@ -1,7 +1,14 @@
 {
  "start": 20.0,
  "balance": 21.97,
- "open": null,
+ "open": {
+  "side": "SELL",
+  "entry": 3961.14,
+  "sl": 3977.51,
+  "tp": 3912.03,
+  "lot": 0.02,
+  "time": "2026-11-12 07:00:00"
+ },
  "history": [
   {
    "side": "BUY",
